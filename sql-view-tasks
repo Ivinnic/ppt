@@ -1,0 +1,77 @@
+CREATE OR REPLACE VIEW gantt_tasks AS SELECT
+   concat_ws('', 'p', `p`.`id`)                   AS `id`,
+   `p`.`name`                                     AS `text`,
+   `p`.`date_start`                               AS `start_date`,
+   `p`.`duration`                                 AS `duration`,
+   `p`.`eta`                                      AS `weekdays`,
+   'project'                                      AS `type`,
+   (CASE WHEN isnull(`h`.`parent_id`) THEN ''
+    ELSE concat_ws('', 'p', `h`.`parent_id`) END) AS `parent`,
+   ''                                             AS `progress`,
+   `p`.`category_id`                              AS `category`,
+   `p`.`status`                                   AS `status`,
+   `p`.`priority`                                 AS `priority`,
+   `p`.`assigned_to`                              AS `assigned_to`,
+   ''                                             AS `assigned_from`,
+   (CASE WHEN isnull(`u`.`realname`) THEN ''
+    ELSE `u`.`realname` END)                      AS `name`,
+   `p`.`sortorder`                                AS `sortorder`,
+   ''                                             AS `due_date`,
+   ''                                             AS `real_start`,
+   ''                                             AS `real_end`,
+   `p`.`description`                              AS `note`,
+   `p`.`addition_type`                            AS `addition_type`,
+   `p`.`project_type`                             AS `project_type`
+ FROM ((`project` `p` LEFT JOIN
+   `project_hierarchy` `h`
+     ON ((`h`.`child_id` = `p`.`id`))) LEFT JOIN
+   `users` `u`
+     ON ((`u`.`id_user` = `p`.`assigned_to`)))
+ UNION SELECT
+         concat_ws('', 'b', `b`.`id`)                   AS `id`,
+         `b`.`summary`                                  AS `text`,
+         from_unixtime(
+             `b`.`start_date`)                          AS `start_date`,
+         `b`.`eta`                                      AS `duration`,
+         `b`.`duration`                                 AS `weekdays`,
+         'task'                                         AS `type`,
+         concat_ws('', 'p', `b`.`project_id`)           AS `parent`,
+         (CASE WHEN (`b`.`progress` IS NOT NULL) THEN `b`.`progress`
+          WHEN (`he`.`date_modified` IS NOT NULL) THEN 100
+          WHEN isnull(`h`.`date_modified`) THEN 0
+          ELSE ((to_days(now()) -
+                 to_days(from_unixtime(`h`.`date_modified`))) /
+                `b`.`eta`) END)                         AS `progress`,
+         '-1'                                           AS `category`,
+         `b`.`status`                                   AS `status`,
+         `b`.`priority`                                 AS `priority`,
+         `b`.`handler_id`                               AS `assigned_to`,
+         `b`.`reporter_id`                              AS `assigned_from`,
+         (CASE WHEN isnull(`u`.`realname`) THEN ''
+          ELSE `u`.`realname` END)                      AS `name`,
+         0                                              AS `sortorder`,
+         from_unixtime(
+             `b`.`due_date`)                            AS `due_date`,
+         (CASE WHEN isnull(`h`.`date_modified`) THEN ''
+          ELSE from_unixtime(
+              `h`.`date_modified`) END)                 AS `real_start`,
+         (CASE WHEN isnull(`he`.`date_modified`) THEN ''
+          ELSE from_unixtime(
+              `he`.`date_modified`) END)                AS `real_end`,
+         `t`.`description`                              AS `note`,
+         ''                                             AS `addition_type`,
+         ''                                             AS `project_type`
+       FROM ((((`bug` `b` LEFT JOIN
+         `users` `u`
+           ON ((`u`.`id_user` = `b`.`handler_id`))) LEFT JOIN
+         `bug_text` `t`
+           ON ((`t`.`id` = `b`.`id`))) LEFT JOIN
+         `bug_history` `h` ON ((
+           (`h`.`bug_id` = `b`.`id`) AND
+           (`h`.`field_name` = 'status') AND (`h`.`new_value` = '40')
+           AND (`h`.`type` = 0)))) LEFT JOIN
+         `bug_history` `he` ON ((
+           (`he`.`bug_id` = `b`.`id`) AND
+           (`he`.`field_name` = 'status') AND
+           (`he`.`new_value` = '80') AND (`he`.`type` = 0))))
+       WHERE (`b`.`status` < 100) 
